@@ -1,6 +1,6 @@
 using MassTransit;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddMassTransit(configurator =>
 {
@@ -10,6 +10,6 @@ builder.Services.AddMassTransit(configurator =>
     });
 });
 
-var app = builder.Build();
+var host = builder.Build();
 
-app.Run();
+host.Run();
