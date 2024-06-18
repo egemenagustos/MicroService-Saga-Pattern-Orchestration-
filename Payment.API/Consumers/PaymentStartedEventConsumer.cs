@@ -16,7 +16,7 @@ namespace Payment.API.Consumers
                 {                  
                 };
 
-                await sendEndpoint.Send(payment)c
+                await sendEndpoint.Send(payment);
             }
 
             else
