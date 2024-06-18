@@ -21,7 +21,7 @@ namespace Stock.API.Consumers
                     .FindAsync(
                     x => x.ProductId == orderItem.ProductId
                     &&
-                    x.Count >= orderItem.Count)).AnyAsync());
+                    x.Count >= (long)orderItem.Count)).AnyAsync());
             }
 
             var sendEnpoint = await sendEndpointProvider
