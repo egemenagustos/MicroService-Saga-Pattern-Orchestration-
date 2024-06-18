@@ -10,12 +10,9 @@ namespace SagaStateMachine.Service.StateMachines
 {
     public class OrderStateMachine : MassTransitStateMachine<OrderStateInstance>
     {
-        // Gelebilecek eventleri bu şekilde property olarak tanımlayacağız. Böylece state machine'de temsil edeceğiz.
         public Event<OrderStartedEvent> OrderStartedEvent { get; set; }
-
         public Event<StockReservedEvent> StockReservedEvent { get; set; }
         public Event<StockNotReservedEvent> StockNotReservedEvent { get; set; }
-
         public Event<PaymentCompletedEvent> PaymentCompletedEvent { get; set; }
         public Event<PaymentFailedEvent> PaymentFailedEvent { get; set; }
 
@@ -27,33 +24,24 @@ namespace SagaStateMachine.Service.StateMachines
 
         public OrderStateMachine()
         {
-            // State machine yapılacak durum bilgilendirilmesi currenstate'de tutulacak.
             InstanceState(instance => instance.CurrentState);
 
-            // Gelen event OrderStartedEvent ise => CorrelateBy metodu ile veritabanında tutulan order state instance'da ki
-            // event orderId'yi kıyaslıyoruz. Bu kıyas sayesinde iligli instance varsa gelenin yeni bir sipariş olmadığını
-            // anlıyoruz ve kaydetmiyoruz.
-            Event(
-                () => OrderStartedEvent, 
-                orderStateInstance => orderStateInstance.CorrelateBy<int>(db => db.OrderId, @event => @event.Message.OrderId)
-                .SelectId(x => Guid.NewGuid())
-                );
+            Event(() => OrderStartedEvent,
+                orderStateInstance => orderStateInstance.CorrelateBy<int>(database => database.OrderId, @event => @event.Message.OrderId)
+                .SelectId(e => Guid.NewGuid()));
 
-            Event(
-               () => StockReservedEvent,
-               orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
+            Event(() => StockReservedEvent,
+                orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
 
-            Event(
-               () => StockNotReservedEvent,
-               orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
+            Event(() => StockNotReservedEvent,
+                orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
 
-            Event(
-               () => PaymentCompletedEvent,
-               orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
+            Event(() => PaymentCompletedEvent,
+                orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
 
-            Event(
-             () => PaymentFailedEvent,
-             orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
+            Event(() => PaymentFailedEvent,
+                orderStateInstance => orderStateInstance.CorrelateById(@event => @event.Message.CorrelationId));
+
 
             Initially(When(OrderStartedEvent)
                 .Then(context =>
@@ -64,40 +52,49 @@ namespace SagaStateMachine.Service.StateMachines
                     context.Instance.CreatedDate = DateTime.UtcNow;
                 })
                 .TransitionTo(OrderCreated)
-                .Send(new Uri($"queue:{RabbitMqSettings.Stock_OrderCreatedEventQueue}"), context => new OrderCreatedEvent(context.Instance.CorrelationId)
+                .Send(new Uri($"queue:{RabbitMqSettings.Stock_OrderCreatedEventQueue}"),
+                context => new OrderCreatedEvent(context.Instance.CorrelationId)
                 {
                     OrderItems = context.Data.OrderItems
                 }));
 
-            
-            During(OrderCreated, When(StockReservedEvent).TransitionTo(StockReserved)
+            During(OrderCreated,
+                When(StockReservedEvent)
+                .TransitionTo(StockReserved)
                 .Send(new Uri($"queue:{RabbitMqSettings.Payment_StartedEventQueue}"),
                 context => new PaymentStartedEvent(context.Instance.CorrelationId)
-            {
-                TotalPrice = context.Instance.TotalPrice,
-                OrderItems = context.Data.OrderItems
-            }), When(StockNotReservedEvent).TransitionTo(StockNotReserved)
-            .Send(new Uri($"queue:{RabbitMqSettings.Order_OrderFailedEventQueue}"), context => new OrderFailedEvent
-            {
-                OrderId = context.Instance.OrderId,
-                Message = context.Data.Message
-            }));
+                {
+                    TotalPrice = context.Instance.TotalPrice,
+                    OrderItems = context.Data.OrderItems
+                }),
+                When(StockNotReservedEvent)
+                .TransitionTo(StockNotReserved)
+                .Send(new Uri($"queue:{RabbitMqSettings.Order_OrderFailedEventQueue}"),
+                context => new OrderFailedEvent
+                {
+                    OrderId = context.Instance.OrderId,
+                    Message = context.Data.Message
+                }));
 
             During(StockReserved,
                 When(PaymentCompletedEvent)
                 .TransitionTo(PaymentCompleted)
-                .Send(new Uri($"queue: {RabbitMqSettings.Order_OrderCompletedEventQueue}"), context => new OrderCompletedEvent
+                .Send(new Uri($"queue:{RabbitMqSettings.Order_OrderCompletedEventQueue}"),
+                context => new OrderCompletedEvent
                 {
-                    OrderId = context.Instance.OrderId, 
-                }).Finalize(),
+                    OrderId = context.Instance.OrderId
+                })
+                .Finalize(),
                 When(PaymentFailedEvent)
                 .TransitionTo(PaymentFailed)
-                .Send(new Uri($"queue: {RabbitMqSettings.Order_OrderFailedEventQueue}"), context => new OrderFailedEvent()
+                .Send(new Uri($"queue:{RabbitMqSettings.Order_OrderFailedEventQueue}"),
+                context => new OrderFailedEvent
                 {
                     OrderId = context.Instance.OrderId,
                     Message = context.Data.Message
                 })
-                .Send(new Uri($"queue: {RabbitMqSettings.Stock_RollbackMessageQueue}"), context => new StockRollbackMessage()
+                .Send(new Uri($"queue:{RabbitMqSettings.Stock_RollbackMessageQueue}"),
+                context => new StockRollbackMessage
                 {
                     OrderItems = context.Data.OrderItems
                 }));

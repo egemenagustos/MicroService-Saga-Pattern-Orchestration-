@@ -71,7 +71,7 @@ app.MapPost("/create-order", async (CreateOrder request, OrderDbContext context,
 
     var sendEndpoint = await sendEndpointProvider.GetSendEndpoint(new($"queue:{RabbitMqSettings.StateMachineQueue}"));
 
-    await sendEndpointProvider.Send<OrderStartedEvent>(startedEvent);
+    await sendEndpoint.Send<OrderStartedEvent>(startedEvent);
 });
 
 
